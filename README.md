@@ -1,2 +1,2 @@
 # I-RACE
-Utilising Integrated constructed wetlands to Reduce Antimicrobial resistance and increase Carbon sequestration in the Environment.
+Welcome to I-RACE: utilising **I**ntegrated constructed wetlands to **R**educe **A**ntimicrobial resistance and increase **C**arbon sequestration in the **E**nvironment.
