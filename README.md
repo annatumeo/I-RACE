@@ -12,4 +12,3 @@ I-RACE undertakes a detailed investigation of the mechanisms of action of ICWs s
 
 
 
-This project (2022-HE-1145) is funded under the EPA Research Programme 2021-2030 and co-funded by the Department of Agriculture, Food and the Marine. The EPA Research Programme is a Government of Ireland initiative funded by the Department of the Environment, Climate and Communications.
