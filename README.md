@@ -9,3 +9,7 @@ I-RACE undertakes a detailed investigation of the mechanisms of action of ICWs s
 
 1. Scholz, M., Harrington, R., Carroll, P. et al. _The Integrated Constructed Wetlands (ICW) concept._ Wetlands 27, 337–354 (2007). https://doi.org/10.1672/0277-5212(2007)27[337:TICWIC]2.0.CO;2
 2. https://teagasc.ie/food/food-safety/research/i-race/
+
+
+
+This project (2022-HE-1145) is funded under the EPA Research Programme 2021-2030 and co-funded by the Department of Agriculture, Food and the Marine. The EPA Research Programme is a Government of Ireland initiative funded by the Department of the Environment, Climate and Communications.
