@@ -61,11 +61,9 @@ mkdir -p "$(dirname "$OUT")" 2>/dev/null || true
 
 SQUEEZE_BASE="$(dirname "$(dirname "$SQUEEZE_DIR")")"
 
-# GENE -> TAXON
 awk -v FS='\t' -v OFS='\t' '
   NR==1 || $0 ~ /^#/ {
     line=$0
-    gsub(/GENE/,"TAXON",line)
     print line
     next
   }
