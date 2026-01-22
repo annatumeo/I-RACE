@@ -5,7 +5,7 @@ set -euo pipefail
 IN_ABR="card.tsv"
 OUT="squeezebricate_out.tsv"
 SQUEEZE_DIR="."
-UNMATCHED_FILE="unmatched.tsv"
+UNMATCHED_FILE="squeezebricate_unmatched.tsv"
 
 usage() {
   cat >&2 <<'EOF'
@@ -20,7 +20,7 @@ Options:
   -i  Abricate results TSV (default: card.tsv)
   -o  Output TSV (default: squeezebricate_out.tsv)
   -s  Path to SqueezeMeta working directory (default: ".")
-  -u  File to write unmatched hits (default: unmatched)
+  -u  File to write unmatched hits (default: squeezebricate_unmatched.tsv)
   -h  Show help
 
 EOF
