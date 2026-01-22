@@ -1,90 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
 
 ### defaults
 IN_ABR="card.tsv"
-OUT="wrapper_out"
-SQUEEZE_DIR="SqueezeMeta/sample/results"
+OUT="wrapper_out.tsv"
+SQUEEZE_DIR="."
+UNMATCHED_FILE="unmatched.tsv"
 
-### parse command-line options
-while getopts ":i:o:s:h" opt; do
-    case "${opt}" in
-        i) IN_ABR="${OPTARG}" ;;
-        o) OUT="${OPTARG}" ;;
-        s) SQUEEZE_DIR="${OPTARG}" ;;
-        h) usage ;;
-        \?)
-            echo "ERROR: Invalid option -${OPTARG}" >&2
-            usage
-            ;;
-        :)
-            echo "ERROR: Option -${OPTARG} requires an argument." >&2
-            usage
-            ;;
-    esac
+usage() {
+  cat >&2 <<'EOF'
+
+Welcome to SqueezeBricate :)
+
+This wrapper adds a TAXON column (derived from SqueezeMeta) to Abricate TSV output.
+
+Usage: squeezebricate_cached.sh -i <abricate.tsv> -o <out.tsv> -s </path/to/your/SqueezeMeta/working/dir> [-u <unmatched_file>]
+
+Options:
+  -i  Abricate results TSV (default: card.tsv)
+  -o  Output TSV (default: wrapper_out.tsv)
+  -s  Path to SqueezeMeta working directory (default: ".")
+  -u  File to write unmatched hits (default: unmatched)
+  -h  Show help
+
+EOF
+  exit 2
+}
+
+while getopts ":i:o:s:u:h" opt; do
+  case "${opt}" in
+    i) IN_ABR="${OPTARG}" ;;
+    o) OUT="${OPTARG}" ;;
+    s) SQUEEZE_DIR="${OPTARG}" ;;
+    u) UNMATCHED_FILE="${OPTARG}" ;;
+    h) usage ;;
+    \?) echo "ERROR: Invalid option -${OPTARG}" >&2; usage ;;
+    :)  echo "ERROR: Option -${OPTARG} requires an argument." >&2; usage ;;
+  esac
 done
 
-
-echo " "
-echo " "
-echo " Usage:"
-echo " -i) path to Abricate results (e.g., card.tsv)"
-echo " -o) path to output"
-echo " -s) path to SqueezeMeta working directory"
-echo " "
-echo "-----------------------------------------------------"
-echo " "
-echo " SqueezeMeta/Abricate current wrapper configuration:"
-echo " "
-echo " - i: ${IN_ABR}"
-echo " - o: ${OUT}"
-echo " - s: ${SQUEEZE_DIR}"
-echo " "
-echo "-----------------------------------------------------"
-echo " "
-echo " "
-
-### check Abricate results file
 if [[ ! -r "${IN_ABR}" ]]; then
-    echo "ERROR: ${IN_ABR} not found. Is it .tsv? Use -h flag for help." >&2
-    exit 1
+  echo "ERROR: ${IN_ABR} not found or not readable." >&2
+  exit 1
 fi
-
-
-### check SqueezeMeta directory
-#if [[ ! "${SQUEEZE_DIR}" =~ /results/?$ ]]; then
-#    SQUEEZE_DIR="${SQUEEZE_DIR%/}/results"
-#fi
 
 SQUEEZE_DIR="$(printf '%s' "$SQUEEZE_DIR" | sed 's#//*#/#g')"
-
 if [[ ! -d "${SQUEEZE_DIR}" ]]; then
-    echo "ERROR: Input directory '${SQUEEZE_DIR}' not found." >&2
-    exit 1
+  echo "ERROR: Input directory '${SQUEEZE_DIR}' not found." >&2
+  exit 1
 fi
 
+command -v gawk >/dev/null 2>&1 || {
+  echo "ERROR: gawk is required for this optimized wrapper." >&2
+  exit 1
+}
 
-### rewrite Abricate TSV by adding TAXON from SqueezeMeta fun3 wranks
-OUT_FILE="${OUT}"
+mkdir -p "$(dirname "$OUT")" 2>/dev/null || true
+: > "$OUT"
+: > "$UNMATCHED_FILE"
 
-### ensure parent dir exists if OUT includes a path
-mkdir -p "$(dirname "$OUT_FILE")" 2>/dev/null || true
-: > "$OUT_FILE"   # truncate
-
-### base directory. Just in case input contains multiple samples
 SQUEEZE_BASE="$(dirname "$(dirname "$SQUEEZE_DIR")")"
 
-awk -v FS='\t' -v OFS='\t' \
-    -v out="$OUT_FILE" \
-    -v squeeze_dir="$SQUEEZE_DIR" \
-    -v squeeze_base="$SQUEEZE_BASE" '
-function pick_taxfile(sample,   f1,f2,probe) {
-    # If squeeze_dir already points to *this* sample/results:
-    f1 = squeeze_dir "/06." sample ".fun3.tax.wranks"
+# GENE -> TAXON
+awk -v FS='\t' -v OFS='\t' '
+  NR==1 || $0 ~ /^#/ {
+    line=$0
+    gsub(/GENE/,"TAXON",line)
+    print line
+    next
+  }
+  { exit }
+' "$IN_ABR" >> "$OUT"
 
-    # Otherwise assume squeeze_base contains multiple sample dirs:
-    #   squeeze_base/<sample>/results/06.<sample>.fun3.tax.wranks
+printf "SAMPLE\tCONTIG\tSTART\tEND\tGENE\tREASON\tORIGINAL_ROW\n" >> "$UNMATCHED_FILE"
+
+TMP_SORTED="$(mktemp)"
+awk -v FS='\t' -v OFS='\t' '
+  NR==1 || $0 ~ /^#/ { next }
+  {
+    s=$1
+    sub(/\/.*/,"",s)
+    print s, $0
+  }
+' "$IN_ABR" | sort -t $'\t' -k1,1 > "$TMP_SORTED"
+
+gawk -v FS='\t' -v OFS='\t' \
+     -v out="$OUT" \
+     -v unmatched="$UNMATCHED_FILE" \
+     -v squeeze_dir="$SQUEEZE_DIR" \
+     -v squeeze_base="$SQUEEZE_BASE" '
+
+function pick_taxfile(sample,f1,f2,probe) {
+    f1 = squeeze_dir "/06." sample ".fun3.tax.wranks"
     f2 = squeeze_base "/" sample "/results/06." sample ".fun3.tax.wranks"
 
-    # Probe readability by trying to read one line (then close; we reopen later).
     if ((getline probe < f1) > 0) { close(f1); return f1 }
     close(f1)
     if ((getline probe < f2) > 0) { close(f2); return f2 }
@@ -92,56 +101,96 @@ function pick_taxfile(sample,   f1,f2,probe) {
     return ""
 }
 
-# GENE -> TAXON
-NR == 1 || $0 ~ /^#/ {
-    line = $0
-    gsub(/GENE/, "TAXON", line)
-    print line >> out
-    next
+function reset_cache() {
+    delete cnt
+    delete st
+    delete en
+    delete tx
 }
 
-{
-    # Abricate columns:
-    # 1: bits[0] sample/path, 2: contig, 3: start, 4: end, 6: bits[5] (GENE col in many abricate outputs)
-    sample = $1
-    sub(/\/.*/, "", sample)  # first path segment
-
-    contig = $2
-    start  = $3 + 0
-    end    = $4 + 0
-
+function load_taxfile(sample,taxfile,p,ps,id,parts,n_parts,c,range_part,r,rs,re,n_tax,taxbits,tax) {
     taxfile = pick_taxfile(sample)
     if (taxfile == "") {
+        # Warn once per sample
         print "WARN: tax file not found for sample=" sample " (tried under " squeeze_dir " and " squeeze_base ")" > "/dev/stderr"
-        print contig "\t<missing_taxfile>" > "/dev/stderr"
-        next
+        return 0
     }
 
-    done = 0
     while ((getline p < taxfile) > 0) {
         split(p, ps, FS)
-
         id = ps[1]
-        n_parts = split(id, parts, "_")
-        c = parts[1] "_" parts[2]
-        if (c != contig) continue
 
+        # contig parsing matches original: first two '_' parts
+        n_parts = split(id, parts, "_")
+        if (n_parts < 3) continue
+        c = parts[1] "_" parts[2]
+
+        # range is last '_' part like "123-456"
         range_part = parts[n_parts]
         split(range_part, r, "-")
         rs = r[1] + 0
         re = r[2] + 0
 
-        # tolerance of <=50 bp slack on either end
+        # taxon is last '_' part of column 2
+        n_tax = split(ps[2], taxbits, "_")
+        tax = taxbits[n_tax]
+
+        cnt[c]++
+        st[c, cnt[c]] = rs
+        en[c, cnt[c]] = re
+        tx[c, cnt[c]] = tax
+    }
+    close(taxfile)
+    return 1
+}
+
+function write_unmatched(sample, contig, start, end, gene, reason,   orig, j) {
+    orig = $2
+    for (j = 3; j <= NF; j++) orig = orig OFS $j
+    print sample, contig, start, end, gene, reason, orig >> unmatched
+}
+
+BEGIN {
+    cur_sample = ""
+    loaded = 0
+    n_missing_tax = 0
+    n_no_match = 0
+}
+
+{
+
+    sample_key = $1
+
+    if (sample_key != cur_sample) {
+        reset_cache()
+        loaded = load_taxfile(sample_key)
+        cur_sample = sample_key
+    }
+
+    contig = $3
+    start  = $4 + 0
+    end    = $5 + 0
+    gene   = $7   # original $6
+
+    if (!loaded) {
+        n_missing_tax++
+        write_unmatched(cur_sample, contig, start, end, gene, "missing_taxfile")
+        next
+    }
+
+    # tolerance is <=50 bp on either end
+    done = 0
+    n = cnt[contig]
+    for (i = 1; i <= n; i++) {
+        rs = st[contig, i]
+        re = en[contig, i]
         if (rs <= start || (rs - start) <= 50) {
             if (end <= re || (end - re) <= 50) {
+                tax = tx[contig, i]
 
-                n_tax = split(ps[2], taxbits, "_")
-                tax = taxbits[n_tax]
-
-                out_line = $1 OFS $2 OFS $3 OFS $4 OFS $5
-                out_line = out_line OFS (tax ";" $6)
-
-                for (i = 7; i <= NF; i++) out_line = out_line OFS $i
+                out_line = $2 OFS $3 OFS $4 OFS $5 OFS $6
+                out_line = out_line OFS (tax ";" $7)
+                for (f = 8; f <= NF; f++) out_line = out_line OFS $f
 
                 print out_line >> out
                 done = 1
@@ -149,12 +198,20 @@ NR == 1 || $0 ~ /^#/ {
             }
         }
     }
-    close(taxfile)
 
     if (!done) {
-	# print unmatched resistance genes:
-        print contig "\t" taxfile > "/dev/stderr"
+        n_no_match++
+        write_unmatched(cur_sample, contig, start, end, gene, "no_match")
     }
 }
-' "$IN_ABR"
+
+END {
+    print "INFO: unmatched (missing_taxfile)=" n_missing_tax ", unmatched (no_match)=" n_no_match > "/dev/stderr"
+}
+' "$TMP_SORTED"
+
+rm -f "$TMP_SORTED"
+
+echo "Wrote: $OUT" >&2
+echo "Wrote: $UNMATCHED_FILE" >&2
 
