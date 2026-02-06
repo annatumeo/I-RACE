@@ -86,9 +86,6 @@ def main() -> None:
         print("No projects provided. Exiting.", file=sys.stderr)
         sys.exit(1)
 
-    if not MASH_DB.exists():
-        print(f"[WARN] MASH_DB path does not exist: {MASH_DB}", file=sys.stderr)
-
     for p in projects:
         results_dir = base / p / "results"
         bins_dir = results_dir / "bins"
